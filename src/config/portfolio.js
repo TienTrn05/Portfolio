@@ -44,10 +44,7 @@ export const portfolioContact = {
 };
 
 export const portfolioLinks = {
-  resume: [
-    `${import.meta.env.BASE_URL}assets/TienResume.pdf`,
-    `${import.meta.env.BASE_URL}assets/Tranngoctien_resume.pdf`,
-  ],
+  resume: `${import.meta.env.BASE_URL}assets/TienResume.pdf`,
   resumeDownloadName: "TranNgocTien_Resume.pdf",
   github: "https://github.com/TienTrn05",
   linkedin: "https://www.linkedin.com/in/tr%E1%BA%A7n-nin-7b0bba355/",

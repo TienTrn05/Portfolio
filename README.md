@@ -2,6 +2,11 @@
 
 A Full-stack Developer portfolio built with React 19, Vite and Tailwind CSS 4. It presents three featured projects by default, an expandable project archive, capability evidence, case studies and contact options.
 
+## Documentation
+
+- [Mô tả ngắn dùng trong CV (Tiếng Việt)](docs/CV_SUMMARY_VI.md)
+- [Tài liệu kỹ thuật: kiến trúc, hook, thuật toán và thư viện (Tiếng Việt)](docs/PORTFOLIO_TECHNICAL_GUIDE_VI.md)
+
 ## Run locally
 
 ```bash

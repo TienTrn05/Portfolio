@@ -62,7 +62,11 @@ jobs:
           set -euo pipefail
           docker run --detach --name portfolio-ci --publish 127.0.0.1:8080:80 tien-portfolio:ci
           trap 'docker logs portfolio-ci; docker rm --force portfolio-ci' EXIT
-          curl --fail --retry 15 --retry-delay 1 --retry-connrefused http://127.0.0.1:8080/healthz
+          # Docker can reset connections while the Nginx entrypoint is still starting.
+          curl --fail --silent --show-error \
+            --retry 30 --retry-delay 1 --retry-all-errors \
+            --connect-timeout 2 --max-time 3 --retry-max-time 60 \
+            http://127.0.0.1:8080/healthz
           curl --fail --silent http://127.0.0.1:8080/ > /tmp/portfolio-index.html
           grep -q 'id="root"' /tmp/portfolio-index.html
           asset=$(grep -oE '/assets/[^" ]+\.js' /tmp/portfolio-index.html | head -n 1)

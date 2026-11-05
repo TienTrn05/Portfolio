@@ -4,6 +4,7 @@ A Full-stack Developer portfolio built with React 19, Vite and Tailwind CSS 4. I
 
 ## Documentation
 
+- [Docker và CI/CD với GitHub Actions, Docker Hub (Tiếng Việt)](docs/DOCKER_CICD_VI.md)
 - [Mô tả ngắn dùng trong CV (Tiếng Việt)](docs/CV_SUMMARY_VI.md)
 - [Tài liệu kỹ thuật: kiến trúc, hook, thuật toán và thư viện (Tiếng Việt)](docs/PORTFOLIO_TECHNICAL_GUIDE_VI.md)
 

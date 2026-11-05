@@ -1,0 +1,9 @@
+services:
+  portfolio:
+    image: ${PORTFOLIO_IMAGE:-tien-portfolio:local}
+    build:
+      context: .
+      dockerfile: dockerfile
+    ports:
+      - "${PORTFOLIO_PORT:-8080}:80"
+    restart: unless-stopped

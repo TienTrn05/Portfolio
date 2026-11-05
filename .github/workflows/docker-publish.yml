@@ -1,0 +1,139 @@
+name: CI and Docker Hub delivery
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ci:
+    name: Check code and container
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint, check formatting and build
+        run: npm run check
+
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build a container for smoke testing
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: tien-portfolio:ci
+          cache-from: type=gha,scope=portfolio
+          cache-to: type=gha,mode=max,scope=portfolio
+
+      - name: Smoke test Nginx and built assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --name portfolio-ci --publish 127.0.0.1:8080:80 tien-portfolio:ci
+          trap 'docker logs portfolio-ci; docker rm --force portfolio-ci' EXIT
+          curl --fail --retry 15 --retry-delay 1 --retry-connrefused http://127.0.0.1:8080/healthz
+          curl --fail --silent http://127.0.0.1:8080/ > /tmp/portfolio-index.html
+          grep -q 'id="root"' /tmp/portfolio-index.html
+          asset=$(grep -oE '/assets/[^" ]+\.js' /tmp/portfolio-index.html | head -n 1)
+          test -n "$asset"
+          curl --fail --silent "http://127.0.0.1:8080$asset" > /dev/null
+          curl --fail --silent http://127.0.0.1:8080/preview/nested > /tmp/portfolio-fallback.html
+          cmp /tmp/portfolio-index.html /tmp/portfolio-fallback.html
+          curl --fail --silent http://127.0.0.1:8080/assets/TienResume.pdf > /tmp/portfolio-resume.pdf
+          head -c 5 /tmp/portfolio-resume.pdf | grep -q '%PDF-'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/assets/missing.js)" = 404
+
+  publish:
+    name: Publish multi-platform image
+    needs: ci
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+      DOCKERHUB_REPOSITORY: ${{ vars.DOCKERHUB_REPOSITORY || 'tien-portfolio' }}
+    steps:
+      - name: Check Docker Hub configuration
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$DOCKERHUB_USERNAME" || -z "$DOCKERHUB_TOKEN" ]]; then
+            echo '::error::Set the DOCKERHUB_USERNAME repository variable and DOCKERHUB_TOKEN repository secret. See docs/DOCKER_CICD_VI.md.'
+            exit 1
+          fi
+
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Sign in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Generate image tags and labels
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKERHUB_REPOSITORY }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,format=long
+
+      - name: Build and push to Docker Hub
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=portfolio
+          cache-to: type=gha,mode=max,scope=portfolio
